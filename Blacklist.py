@@ -218,7 +218,7 @@ def prefix_url(urlList):
 #url = "http://www.xvideos.com"
 #scrape_url(url)    
 
-selectList = read_from_db(num=40)
+selectList = read_from_db(num=10)
 for link in selectList:
     scrape_url(link,new=0)
 print "Completed"    
