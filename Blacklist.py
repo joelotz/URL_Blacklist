@@ -29,14 +29,45 @@ _DATE  = time.strftime('%Y-%m-%d')
 ##------------------------------##
 
 
-def scrape_site(url):
+def scrape_site(url,new):
     dirtyList = []
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text,"html.parser",parse_only=SoupStrainer("a"))
-    for link in soup:
-        temp = urlparse(link.get('href'))
-        dirtyList.append(temp.netloc)
-    return [x.lower() for x in dirtyList]
+    try:
+        r = requests.get(url)
+        soup = BeautifulSoup(r.text,"html.parser",parse_only=SoupStrainer("a"))
+        for link in soup:
+            temp = urlparse(link.get('href'))
+            dirtyList.append(temp.netloc)
+        dirtyList = [x.lower() for x in dirtyList]
+        if new==0: update_date_checked(url) # if scraped site is not new, update date checked
+    except:
+        inactivate_site(url)
+    return dirtyList
+
+def update_date_checked(url):
+    try:
+        conn, cursor = connect2db()
+        sql = "UPDATE %s SET date_checked='%s' WHERE url='%s';"
+        cursor.execute(sql % (_TABLE,_DATE,url))
+        conn.commit()
+    except:
+        print "Error: while inactivating url"
+    finally:
+        conn.close()  # disconnect from server
+        cursor.close() # close cursor object
+    return 
+    
+def inactivate_site(url):
+    try:
+        conn, cursor = connect2db()
+        sql = "UPDATE %s SET active=0 WHERE url='%s';"
+        cursor.execute(sql % (_TABLE,url))
+        conn.commit()
+    except:
+        print "Error: while inactivating url"
+    finally:
+        conn.close()  # disconnect from server
+        cursor.close() # close cursor object
+    return 
     
 def clean_list(dirtyList):
     cleanList = filter(None, dirtyList)  # remove blanks
@@ -44,68 +75,77 @@ def clean_list(dirtyList):
     return [x.lower() for x in cleanList]
 
 def sanitize_list(cleanList,whiteListName="whitelist.csv"):
-    try:    
-        # Open the whitelist     
-        whiteList = open_file(whiteListName)
-        whiteList = clean_list(whiteList)
-        sanitizedList = set(cleanList) - set(whiteList)#filter(None, dirtyList)
-    except:
-        sanitizedList = cleanList
-        print "Error: "
+    whiteList = open_file(whiteListName)
+    whiteList = clean_list(whiteList)
+    sanitizedList = set(cleanList) - set(whiteList)#filter(None, dirtyList)
     return sanitizedList    
 
 def open_file(fileName):
     try:
         # Open the whitelist     
         f = open(fileName)
+    except IOError:
+        print "Error: Unable to open file."            
+    finally:
         fileList = [line.strip() for line in f]
         fileList = [x.lower() for x in fileList]
         f.close()
-    except:
-        if f:
-            f.close()
-        print "Error: Unable to open file."            
     return fileList
     
-
-def upload2db(urlList,url=''):
+def connect2db():
     try:
         # Open database connection
-        conn = MySQLdb.connect(host = _HOST, 
-                             user = _USER, 
-                             passwd = _PASS,
-                             db = _DATA)
-        
+        conn = MySQLdb.connect(host= _HOST, user= _USER, passwd= _PASS, db= _DATA)
         # prepare a cursor object using cursor() method
         cursor = conn.cursor()
-        # Prepare SQL query to INSERT a record into the database.
-        sql = "INSERT INTO %s(url, active, date_entered, data_source, \
-            referrer, links) VALUES ('%s', '%d', '%s', '%s', '%s', '%d');"
-        
-        cnt = 0                
-        # Execute the SQL command5
-        for link in urlList:
-            try:
-                cursor.execute(sql % (_TABLE, link, 1, _DATE, _USER, url, 0))
-                cnt = cnt + 1
-            except:
-                cnt = cnt
-                
-        ###***** Maybe update url with links=cnt                
-        # Commit your changes in the database
-        conn.commit()
-        print "Number of rows affected: %d" % cnt
     except MySQLdb.Error, e:
         print "Error %d: %s" % (e.args[0],e.args[1])
         sys.exit(1)
-    finally:    
-        if conn:    
-            conn.close()  # disconnect from server
-            cursor.close() # close cursor object
+    return conn,cursor
+    
+def upload2db(urlList,url=''):
+    
+    cnt = 0 # intialize counter
+    # connect to database    
+    conn, cursor = connect2db()
+    # Prepare SQL query to INSERT a record into the database.
+    sql = "INSERT INTO %s(url, active, date_entered, data_source, \
+        referrer) VALUES ('%s', '%d', '%s', '%s', '%s', '%d');"
+    
+    for link in urlList:
+        try:
+            cursor.execute(sql % (_TABLE, link, 1, _DATE, _USER, url))
+            cnt = cnt + 1
+        except:
+            cnt = cnt
+    conn.commit()
+    conn.close()  # disconnect from server
+    cursor.close() # close cursor object
+    print "Number of rows affected: %d" % cnt
+    if (cnt>0 and url!=''): update_num_links(cnt,url)
+        
     return
 
-def scrape_url(url):
-    dirtyList     = scrape_site(url)
+def update_num_links(cnt,url):
+    try:
+        conn, cursor = connect2db()
+        sql = "SELECT links FROM %s WHERE url='%s';"
+        cursor.execute(sql % (_TABLE, url))
+        for row in cursor.fetchall(): old_links = row[0]
+        
+        sql = "UPDATE %s SET links=%d WHERE url='%s';"
+        cursor.execute(sql % (_TABLE, cnt+old_links, url))
+        conn.commit()
+    except:
+        print "Error: while udating links"
+    finally:
+        conn.close()  # disconnect from server
+        cursor.close() # close cursor object
+    return 
+    
+    
+def scrape_url(url,new):
+    dirtyList     = scrape_site(url,new)
     dirtyList     = prefix_url(dirtyList)    
     cleanList     = clean_list(dirtyList)
     sanitizedList = sanitize_list(cleanList)
@@ -121,28 +161,15 @@ def import_url_file(fileName):
     upload2db(prefixList)
     return
 
-def read_from_db(num=20):
+def read_from_db(num=20,links=1):
     try:
-        # Open database connection
-        conn = MySQLdb.connect(host = _HOST, 
-                             user = _USER, 
-                             passwd = _PASS,
-                             db = _DATA)
-        
-        # prepare a cursor object using cursor() method
-        cursor = conn.cursor()
-        sql = "SELECT url FROM %s WHERE referrer='' ORDER BY date_entered DESC LIMIT %d;"
-        cursor.execute(sql % (_TABLE,num))
+        conn, cursor = connect2db()
+        sql = "SELECT url FROM %s WHERE active=1 AND links<%d ORDER BY date_entered DESC LIMIT %d;"
+        cursor.execute(sql % (_TABLE,links,num))
         selectList = []
-        for row in cursor.fetchall() :
-            selectList.append(row[0])
-    except MySQLdb.Error, e:
-        print "Error %d: %s" % (e.args[0],e.args[1])
-        sys.exit(1)
-    finally:    
-        if conn:    
-            conn.close()  # disconnect from server
-            cursor.close() # close cursor object
+        for row in cursor.fetchall(): selectList.append(row[0])
+    except:
+        print "Error: Reading from database"
     return selectList
     
 def prefix_url(urlList):
@@ -155,22 +182,36 @@ def prefix_url(urlList):
             prefixList.append(link)
         elif link.startswith( 'enter.'):    
             link = "http://" + link[6:]
+            prefixList.append(link)
         elif link.startswith( 'blog.'):    
             link = "http://" + link[5:]
+            prefixList.append(link)            
         elif link.startswith( 'join.'):    
             link = "http://" + link[5:]
+            prefixList.append(link)            
         elif link.startswith( 'm.'):    
             link = "http://" + link[2:]
+            prefixList.append(link)            
         elif link.startswith( 'stats.'):    
             link = "http://" + link[6:]
+            prefixList.append(link)            
         elif link.startswith( 'static.'):    
             link = "http://" + link[7:]            
+            prefixList.append(link)
+        elif link.startswith( 'tour.'):    
+            link = "http://" + link[5:]            
+            prefixList.append(link)
+        elif link.startswith( 'members.'):    
+            link = "http://" + link[7:]            
+            prefixList.append(link)
+        elif link.startswith( ' '):    
+            continue
         else:
             link = "http://www."+ link
             prefixList.append(link)
     return prefixList
     
-
+    
 #fileName = 'urlList.txt'
 #s = import_url_file(fileName)
 
@@ -179,6 +220,6 @@ def prefix_url(urlList):
 
 selectList = read_from_db(num=40)
 for link in selectList:
-    scrape_url(link)
-    print "Completed"    
+    scrape_url(link,new=0)
+print "Completed"    
     
