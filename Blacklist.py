@@ -27,7 +27,7 @@ _DATE  = time.strftime('%Y-%m-%d')
 ##------------------------------##
 
 
-def scrape_site(url,new):
+def scrape_site(url):
     dirtyList = []
     try:
         r = requests.get(url)
@@ -35,10 +35,12 @@ def scrape_site(url,new):
         for link in soup:
             temp = urlparse(link.get('href'))
             dirtyList.append(temp.netloc)
-        dirtyList = [x.lower() for x in dirtyList]
         update_date_checked(url) # if scraped site is not new, update date checked
+        dirtyList = [x.lower() for x in dirtyList]
     except:
         inactivate_site(url)
+        print ("Site '%s' is inactive" % url)
+
     return dirtyList
 
 def update_date_checked(url):
@@ -117,7 +119,7 @@ def upload2db(urlList,url=''):
     conn.commit()
     conn.close()  # disconnect from server
     cursor.close() # close cursor object
-    print "Number of rows affected: %d" % cnt
+    print ("Site gave %d links" % cnt)
     if (cnt>0 and url!=''): update_num_links(cnt,url)
 
     return
@@ -140,7 +142,7 @@ def update_num_links(cnt,url):
         cursor.close() # close cursor object
     return
 
-def read_from_db(num=20,links=1):
+def read_from_db(num=10,links=1):
     try:
         conn, cursor = connect2db()
         sql = "SELECT url FROM %s WHERE active=1 AND links<%d ORDER BY date_entered DESC LIMIT %d;"
@@ -180,8 +182,11 @@ def prefix_url(urlList):
         elif link.startswith( 'tour.'):
             link = "http://" + link[5:]
             prefixList.append(link)
-        elif link.startswith( 'members.'):
+        elif link.startswith( 'access.'):
             link = "http://" + link[7:]
+            prefixList.append(link)
+        elif link.startswith( 'members.'):
+            link = "http://" + link[8:]
             prefixList.append(link)
         elif link.startswith( ' '):
             continue
@@ -190,8 +195,8 @@ def prefix_url(urlList):
             prefixList.append(link)
     return prefixList
 
-def scrape_url(url,new):
-    dirtyList     = scrape_site(url,new)
+def scrape_url(url):
+    dirtyList     = scrape_site(url)
     dirtyList     = prefix_url(dirtyList)
     cleanList     = clean_list(dirtyList)
     sanitizedList = sanitize_list(cleanList)
@@ -207,11 +212,19 @@ def import_url_file(fileName):
     upload2db(prefixList)
     return
 
-#fileName = 'urlList.txt'
-#s = import_url_file(fileName)
+def run(num=20):
+    selectList = read_from_db(num=20)
+    for link in selectList:
+        scrape_url(link)
+    print "Completed"
+    return
+    
+fileName = 'urlList.txt'
+s = import_url_file(fileName)
 
-selectList = read_from_db(num=20)
-for link in selectList:
-    scrape_url(link,new=0)
-print "Completed"
-
+count = 0
+numRuns=20
+while (count < numRuns):
+    run(num=20)
+    count = count + 1
+    
