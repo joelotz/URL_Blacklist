@@ -21,7 +21,7 @@ _HOST  = "localhost"
 _USER  = "blacklist_admin"
 _PASS  = "charlie1"
 _DATA  = "blacklist"
-_TABLE = "blacklist_test"
+_TABLE = "blacklist"
 
 _DATE  = time.strftime('%Y-%m-%d')
 ##------------------------------##
@@ -128,7 +128,8 @@ def update_num_links(cnt,url):
         sql = "SELECT links FROM %s WHERE url='%s';"
         cursor.execute(sql % (_TABLE, url))
         for row in cursor.fetchall(): old_links = row[0]
-
+        
+        if old_links==-1: old_links=0
         sql = "UPDATE %s SET links=%d WHERE url='%s';"
         cursor.execute(sql % (_TABLE, cnt+old_links, url))
         conn.commit()
@@ -206,10 +207,10 @@ def import_url_file(fileName):
     upload2db(prefixList)
     return
 
-##fileName = 'urlList.txt'
+#fileName = 'urlList.txt'
 #s = import_url_file(fileName)
 
-selectList = read_from_db(num=10)
+selectList = read_from_db(num=20)
 for link in selectList:
     scrape_url(link,new=0)
 print "Completed"
