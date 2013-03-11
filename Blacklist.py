@@ -28,7 +28,7 @@ _DATE  = time.strftime('%Y-%m-%d')
 
 
 def scrape_site(url):
-    dirtyList = []
+    dirtyList = [(urlparse(url)).netloc]
     try:
         r = requests.get(url)
         soup = BeautifulSoup(r.text,"html.parser",parse_only=SoupStrainer("a"))
@@ -39,7 +39,8 @@ def scrape_site(url):
         dirtyList = [x.lower() for x in dirtyList]
     except:
         inactivate_site(url)
-        print ("Site '%s' is inactive" % url)
+        #print ("Site '%s' is inactive" % url)
+        print ("Site is inactive")        
 
     return dirtyList
 
@@ -95,7 +96,7 @@ def open_file(fileName):
 def connect2db():
     try:
         # Open database connection
-        conn = MySQLdb.connect(host= _HOST, user= _USER, passwd= _PASS, db= _DATA)
+        conn = MySQLdb.connect(host=_HOST, user=_USER, passwd=_PASS, db=_DATA)
         # prepare a cursor object using cursor() method
         cursor = conn.cursor()
     except MySQLdb.Error, e:
@@ -122,7 +123,7 @@ def upload2db(urlList,url=''):
     print ("Site gave %d links" % cnt)
     if (cnt>0 and url!=''): update_num_links(cnt,url)
 
-    return
+    return cnt
 
 def update_num_links(cnt,url):
     try:
@@ -136,22 +137,42 @@ def update_num_links(cnt,url):
         cursor.execute(sql % (_TABLE, cnt+old_links, url))
         conn.commit()
     except:
-        print "Error: while udating links"
+        print "Error: while updating links"
     finally:
         conn.close()  # disconnect from server
         cursor.close() # close cursor object
     return
 
-def read_from_db(num=10,links=1):
+def read_from_db(num=10,links=0,readType=0):
     try:
         conn, cursor = connect2db()
-        sql = "SELECT url FROM %s WHERE active=1 AND links<%d ORDER BY date_entered DESC LIMIT %d;"
+        if readType==0:
+            sql = "SELECT url FROM %s WHERE active=1 AND links<%d ORDER BY date_entered DESC LIMIT %d;"            
+        else:
+            sql = "SELECT url FROM %s WHERE active=1 AND links>%d ORDER BY links DESC LIMIT %d;"                
         cursor.execute(sql % (_TABLE,links,num))
         selectList = []
         for row in cursor.fetchall(): selectList.append(row[0])
     except:
         print "Error: Reading from database"
     return selectList
+
+def clean_db(whiteListName="whitelist.csv",isListFile=1):
+    if isListFile==1: 
+        whiteList = open_file(whiteListName)
+    else:
+        whiteList = whiteListName
+    conn, cursor = connect2db()
+    sql = "DELETE FROM %s WHERE url='%s';"
+    for link in whiteList:
+        try:
+            cursor.execute(sql % (_TABLE, link))
+        except:
+            print "Error: Writing to database"
+    conn.commit()            
+    conn.close()  # disconnect from server
+    cursor.close() # close cursor object
+    return
 
 def prefix_url(urlList):
     prefixList = []
@@ -195,36 +216,75 @@ def prefix_url(urlList):
             prefixList.append(link)
     return prefixList
 
-def scrape_url(url):
-    dirtyList     = scrape_site(url)
-    dirtyList     = prefix_url(dirtyList)
+def clean_and_upload(dirtyList,url):
+    dirtyList      = prefix_url(dirtyList)
     cleanList     = clean_list(dirtyList)
     sanitizedList = sanitize_list(cleanList)
-    upload2db(sanitizedList,url)
-    return
+    cnt = upload2db(sanitizedList,url)
+    return cnt
+
+#######################################################################3
+
+def scrape_url(url):
+    dirtyList     = scrape_site(url)
+    cnt = clean_and_upload(dirtyList,url)
+    return cnt
 
 def import_url_file(fileName):
-    fileList      = open_file(fileName)
-    fileList      = prefix_url(fileList)
-    cleanList     = clean_list(fileList)
-    sanitizedList = sanitize_list(cleanList)
-    prefixList    = prefix_url(sanitizedList)
-    upload2db(prefixList)
+    dirtyList      = open_file(fileName)
+    clean_and_upload(dirtyList)
     return
 
+
 def run(num=20):
-    selectList = read_from_db(num=20)
+    selectList = read_from_db(num=30,links=0,readType=0)
     for link in selectList:
         scrape_url(link)
     print "Completed"
     return
-    
-fileName = 'urlList.txt'
-s = import_url_file(fileName)
 
-count = 0
-numRuns=20
-while (count < numRuns):
-    run(num=20)
-    count = count + 1
-    
+######################
+
+link = "http://adultlinkpost.com/amateurs.htm"
+scrape_url(link)
+
+
+#####################
+#sect = "webcam"
+#cnt = 1
+#ndx = 2
+
+#link = "http://www.adultblogsdirectory.org/"+sect+"/"
+#scrape_url(link)
+
+#while cnt>0:
+#   link = "http://www.adultblogsdirectory.org/"+sect+"/index" + str(ndx) +".html"
+#   cnt = scrape_url(link)
+#  ndx = ndx +1
+
+#####################
+#sect = "aaaa"
+#cnt = 1
+#ndx = 1
+#link = "http://www.adultblogdirectory.com/"+sect+"/"
+#crape_url(link)
+#
+#while cnt>0:
+#   link = "http://www.adultblogdirectory.com/"+sect+"/" + str(ndx) +"/"
+#   cnt = scrape_url(link)
+#   ndx = ndx +1
+########################
+
+#fileName = 'urlList.txt'
+#s = import_url_file(fileName)
+#
+#count = 0
+#umRuns=4000
+#while (count < numRuns):
+#    run(num=20)
+#    count = count + 1
+
+#selectList = read_from_db(num=30,links=0,readType=0)
+#for link in selectList:
+#    scrape_url(link)
+#print "Completed"    
