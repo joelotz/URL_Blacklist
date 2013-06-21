@@ -310,6 +310,13 @@ def clean_db(whiteListName="whitelist.csv",isListFile=1):
     cursor.close() # close cursor object
     return
 
+def import_url_file(fileName):
+    fileList  = open_file(fileName)
+    cleanList = clean_list(fileList)
+    sanitizedList = sanitize_list(cleanList)
+    upload2db(sanitizedList)
+    return
+    
 """
 def scrape_url(url):
     dirtyList     = scrape_site(url)
