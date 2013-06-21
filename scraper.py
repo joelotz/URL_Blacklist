@@ -13,7 +13,11 @@ def scrape_url(url):
     dirtyList     = bl.scrape_site(url)
     cleanList     = bl.clean_list(dirtyList)
     sanitizedList = bl.sanitize_list(cleanList)
-    bl.upload2db(sanitizedList,url)
+#    bl.upload2db(sanitizedList,url)    
+    
+    print dirtyList
+    print cleanList
+    print sanitizedList    
     print "completed"
     return
 
@@ -28,5 +32,5 @@ def import_url_file(fileName):
 #fileName = 'urlList.txt'
 #s = import_url_file(fileName)
 
-url = 'http://www.bangbros.com'
+url = 'www.hottystop.com'
 scrape_url(url)    

@@ -28,8 +28,9 @@ _DATE  = time.strftime('%Y-%m-%d')
 
 
 def scrape_site(url):
-    dirtyList = [(urlparse(url)).netloc]
     try:
+        if not url.startswith("http://"): url = "http://"+url
+        dirtyList = [(urlparse(url)).netloc]
         r = requests.get(url)
         soup = BeautifulSoup(r.text,"html.parser",parse_only=SoupStrainer("a"))
         for link in soup:
@@ -121,8 +122,10 @@ def upload2db(urlList,url=''):
     conn.close()  # disconnect from server
     cursor.close() # close cursor object
     print ("Site gave %d links" % cnt)
-    if (cnt>0 and url!=''): update_num_links(cnt,url)
-
+    if (cnt>0 and url!=''): 
+        link = [(urlparse(url)).netloc]
+        link = prefix_url(link)
+        update_num_links(cnt, link[0])
     return cnt
 
 def update_num_links(cnt,url):
@@ -131,8 +134,7 @@ def update_num_links(cnt,url):
         sql = "SELECT links FROM %s WHERE url='%s';"
         cursor.execute(sql % (_TABLE, url))
         for row in cursor.fetchall(): old_links = row[0]
-        
-        if old_links==-1: old_links=0
+        if old_links==-1: old_links=0  # set to 0 so we know that it has been looked at
         sql = "UPDATE %s SET links=%d WHERE url='%s';"
         cursor.execute(sql % (_TABLE, cnt+old_links, url))
         conn.commit()
@@ -209,7 +211,7 @@ def prefix_url(urlList):
         elif link.startswith( 'members.'):
             link = "http://" + link[8:]
             prefixList.append(link)
-        elif link.startswith( ' '):
+        elif link.startswith(''):
             continue
         else:
             link = "http://www."+ link
@@ -217,10 +219,10 @@ def prefix_url(urlList):
     return prefixList
 
 def clean_and_upload(dirtyList,url):
-    dirtyList      = prefix_url(dirtyList)
+    dirtyList     = prefix_url(dirtyList)
     cleanList     = clean_list(dirtyList)
     sanitizedList = sanitize_list(cleanList)
-    cnt = upload2db(sanitizedList,url)
+#    cnt = upload2db(sanitizedList,url)
     return cnt
 
 #######################################################################3
@@ -235,7 +237,6 @@ def import_url_file(fileName):
     clean_and_upload(dirtyList)
     return
 
-
 def run(num=20):
     selectList = read_from_db(num=30,links=0,readType=0)
     for link in selectList:
@@ -245,46 +246,8 @@ def run(num=20):
 
 ######################
 
-link = "http://adultlinkpost.com/amateurs.htm"
-scrape_url(link)
-
-
-#####################
-#sect = "webcam"
-#cnt = 1
-#ndx = 2
-
-#link = "http://www.adultblogsdirectory.org/"+sect+"/"
-#scrape_url(link)
-
-#while cnt>0:
-#   link = "http://www.adultblogsdirectory.org/"+sect+"/index" + str(ndx) +".html"
-#   cnt = scrape_url(link)
-#  ndx = ndx +1
-
-#####################
-#sect = "aaaa"
-#cnt = 1
-#ndx = 1
-#link = "http://www.adultblogdirectory.com/"+sect+"/"
-#crape_url(link)
-#
-#while cnt>0:
-#   link = "http://www.adultblogdirectory.com/"+sect+"/" + str(ndx) +"/"
-#   cnt = scrape_url(link)
-#   ndx = ndx +1
-########################
-
-#fileName = 'urlList.txt'
-#s = import_url_file(fileName)
-#
-#count = 0
-#umRuns=4000
-#while (count < numRuns):
-#    run(num=20)
-#    count = count + 1
-
-#selectList = read_from_db(num=30,links=0,readType=0)
-#for link in selectList:
-#    scrape_url(link)
-#print "Completed"    
+url = 'www.hottystop.com'
+dirtyList     = scrape_site(url)
+predirtyList  = prefix_url(dirtyList)
+cleanList     = clean_list(predirtyList)
+sanitizedList = sanitize_list(cleanList)
